@@ -4,9 +4,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Checkbox } from './ui/checkbox';
-import { X, Plus, Bug as BugIcon } from 'lucide-react';
+import { X, Plus, Bug as BugIcon, ChevronRight, Folder } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Separator } from './ui/separator';
 import { BugList } from './bug/BugList';
@@ -41,6 +42,8 @@ export function TelaNovaDemanda({
 }: TelaNovaDemandaProps) {
   const [titulo, setTitulo] = useState('');
   const [projeto, setProjeto] = useState('');
+  const [categoria, setCategoria] = useState('');
+  const [descricao, setDescricao] = useState('');
   const [dataTarefa, setDataTarefa] = useState('');
   const [prazoEntrega, setPrazoEntrega] = useState('');
   const [responsavelId, setResponsavelId] = useState('');
@@ -57,6 +60,8 @@ export function TelaNovaDemanda({
     if (demandaEdit) {
       setTitulo(demandaEdit.Titulo);
       setProjeto(demandaEdit.Projeto);
+      setCategoria(demandaEdit.Categoria || '');
+      setDescricao(demandaEdit.Descricao || '');
       setDataTarefa(new Date(demandaEdit.DataTarefa).toISOString().split('T')[0]);
       setPrazoEntrega(new Date(demandaEdit.PrazoEntrega).toISOString().split('T')[0]);
       setResponsavelId(demandaEdit.ResponsavelId);
@@ -69,6 +74,8 @@ export function TelaNovaDemanda({
   const limparFormulario = () => {
     setTitulo('');
     setProjeto('');
+    setCategoria('');
+    setDescricao('');
     setDataTarefa('');
     setPrazoEntrega('');
     setResponsavelId('');
@@ -110,6 +117,8 @@ export function TelaNovaDemanda({
       onAtualizar(demandaEdit.Id, {
         Titulo: titulo,
         Projeto: projeto,
+        Categoria: categoria,
+        Descricao: descricao,
         DataTarefa: new Date(dataTarefa),
         PrazoEntrega: new Date(prazoEntrega),
         ResponsavelId: responsavel.PessoaId,
@@ -121,6 +130,8 @@ export function TelaNovaDemanda({
       const novaDemanda: Omit<Demanda, 'Id'> = {
         Titulo: titulo,
         Projeto: projeto,
+        Categoria: categoria,
+        Descricao: descricao,
         DataTarefa: new Date(dataTarefa),
         PrazoEntrega: new Date(prazoEntrega),
         ResponsavelId: responsavel.PessoaId,
@@ -203,7 +214,37 @@ export function TelaNovaDemanda({
             </TabsList>
 
             <TabsContent value="info" className="space-y-4 py-4">
-            {/* Existing Form Content */}
+            
+            {/* 1. 프로젝트 (최상단) */}
+            <div className="space-y-2">
+                <Label htmlFor="projeto">프로젝트 *</Label>
+                <Input
+                id="projeto"
+                value={projeto}
+                onChange={(e) => setProjeto(e.target.value)}
+                placeholder="프로젝트 이름 입력"
+                />
+            </div>
+
+            {/* 1.5 카테고리/디렉토리 (WBS 폴더 구조) */}
+            <div className="space-y-2">
+                <Label htmlFor="categoria" className="text-gray-600">디렉토리</Label>
+                <div className="relative">
+                    <Input
+                        id="categoria"
+                        value={categoria}
+                        onChange={(e) => setCategoria(e.target.value)}
+                        placeholder="예: 사용자 관리 > 회원가입 > 약관동의"
+                        className="pl-9" 
+                    />
+                    <div className="absolute left-3 top-2.5 text-gray-400">
+                        <Folder className="w-4 h-4" />
+                    </div>
+                </div>
+                {/* Breadcrumb Preview Removed */}
+            </div>
+
+            {/* 2. 제목 */}
             <div className="space-y-2">
                 <Label htmlFor="titulo">제목 *</Label>
                 <Input
@@ -214,13 +255,15 @@ export function TelaNovaDemanda({
                 />
             </div>
 
+            {/* 3. 상세 설명 (추가됨) */}
             <div className="space-y-2">
-                <Label htmlFor="projeto">프로젝트 *</Label>
-                <Input
-                id="projeto"
-                value={projeto}
-                onChange={(e) => setProjeto(e.target.value)}
-                placeholder="프로젝트 이름 입력"
+                <Label htmlFor="descricao">기능 상세 설명</Label>
+                <Textarea
+                    id="descricao"
+                    value={descricao}
+                    onChange={(e) => setDescricao(e.target.value)}
+                    placeholder="기능에 대한 상세한 설명을 입력하세요..."
+                    className="min-h-[100px]"
                 />
             </div>
 

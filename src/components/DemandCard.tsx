@@ -6,7 +6,7 @@ import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
-import { Calendar, Clock, AlertCircle, CheckCircle2, ArrowRight, ArrowLeft, CheckCheck, FileText, Info, Bug } from 'lucide-react';
+import { Calendar, Clock, AlertCircle, CheckCircle2, ArrowRight, ArrowLeft, CheckCheck, FileText, Info, Bug, ChevronRight } from 'lucide-react';
 
 interface DemandCardProps {
   demanda: Demanda;
@@ -116,50 +116,56 @@ export function DemandCard({
           transform: 'translate3d(0, 0, 0)'
         }}
       >
-        <CardHeader className="pb-3 pt-4 px-4">
-          <CardTitle className="flex items-start justify-between gap-2 text-base">
-            <div className="flex flex-col gap-1 w-full">
-                {/* 메타데이터 (프로젝트, 우선순위) */}
-                <div className="flex items-center gap-2 mb-1">
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 text-gray-500 border-gray-200">
-                        {demanda.Projeto}
+        <CardHeader className="pb-2 pt-4 px-4">
+          {/* 1. 프로젝트 & 우선순위 (최상단) */}
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-[10px] px-2 py-0.5 font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 shadow-sm">
+                    {demanda.Projeto}
+                </Badge>
+                {demanda.Prioridade && (
+                    <Badge variant="outline" className={`text-[10px] px-1.5 py-0.5 ${getPriorityColor(demanda.Prioridade)}`}>
+                        {demanda.Prioridade}
                     </Badge>
-                    {demanda.Prioridade && (
-                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 ${getPriorityColor(demanda.Prioridade)}`}>
-                            {demanda.Prioridade}
-                        </Badge>
-                    )}
-                </div>
-                
-                {/* 타이틀 및 상세 정보 아이콘 */}
-                <div className="flex items-start justify-between w-full">
-                    <span className="font-semibold leading-tight">{demanda.Titulo}</span>
-                    <div className="flex flex-col items-end gap-1">
-                        {demanda.Status === 'Demandas Resolvidas' && (
-                            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
-                        )}
-                    </div>
-                </div>
+                )}
             </div>
-          </CardTitle>
-          
-          {/* 카테고리 (WBS Depth) */}
+          </div>
+
+          {/* 2. 카테고리/디렉토리 (위치 변경됨: 제목 위) */}
           {demanda.Categoria && (
-             <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                <FileText className="w-3 h-3" />
-                <span>{demanda.Categoria}</span>
+             <div className="text-[10px] text-gray-400 flex items-center gap-1 mb-2 pl-0.5">
+                <FileText className="w-3 h-3 flex-shrink-0 opacity-70" />
+                <div className="flex flex-wrap items-center gap-0.5">
+                    {demanda.Categoria.split('>').map((part, index, arr) => (
+                        <span key={index} className={`flex items-center ${index === arr.length - 1 ? 'text-gray-500 font-medium' : ''}`}>
+                            {part.trim()}
+                            {index < arr.length - 1 && <ChevronRight className="w-3 h-3 text-gray-300 mx-0.5" />}
+                        </span>
+                    ))}
+                </div>
              </div>
           )}
 
-        </CardHeader>
-        <CardContent className="space-y-3 pb-4 px-4">
-            
-          {/* 설명 (Tooltip or Text) */}
+          {/* 3. 제목 & 아이콘 */}
+          <div className="flex items-start justify-between w-full mb-2">
+              <span className="font-bold text-sm leading-tight text-gray-900">{demanda.Titulo}</span>
+              <div className="flex flex-col items-end gap-1">
+                  {demanda.Status === 'Demandas Resolvidas' && (
+                      <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  )}
+              </div>
+          </div>
+
+          {/* 3. 상세 설명 (제목 아래) */}
           {demanda.Descricao && (
-              <p className="text-xs text-gray-500 line-clamp-2 bg-slate-50 p-2 rounded-md">
+              <div className="text-xs text-gray-500 bg-slate-50/80 p-2 rounded-md border border-slate-100 mb-1 line-clamp-3 leading-relaxed">
                   {demanda.Descricao}
-              </p>
+              </div>
           )}
+        </CardHeader>
+        
+        <CardContent className="space-y-3 pb-4 px-4 pt-0">
+          {/* 설명 부분 이동됨 */}
 
           {/* Informações de data */}
           <div className="space-y-1 text-xs">

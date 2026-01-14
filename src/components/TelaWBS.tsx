@@ -2,9 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { Demanda } from '../types';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Checkbox } from './ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Plus, Trash2, ArrowRight, Save, LayoutDashboard, ChevronRight, ChevronDown, AlignLeft, AlignJustify, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, ArrowRight, Save, LayoutDashboard, ChevronRight, ChevronDown, AlignLeft, AlignJustify, RotateCcw, Folder, FolderOpen, FileText, CornerDownRight, Indent, Outdent, MoreHorizontal, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from './ui/utils';
 // 이미지 임포트
@@ -20,36 +21,97 @@ interface TelaWBSProps {
 // 트리 구조를 표현하기 위한 확장된 행 타입
 interface WBSRow {
   id: string;
-  level: number; // 0, 1, 2 (Lv1, Lv2, Lv3)
+  level: number; // 0, 1, 2, 3 (Lv1, Lv2, Lv3, Lv4)
   category: string; // 자동 계산될 수 있음 (상위 레벨의 이름)
   title: string;
   description: string;
   priority: 'High' | 'Medium' | 'Low';
   responsibleId: string;
-  startDate: number | null; // 1~31 (편의상 1월 기준)
-  endDate: number | null;   // 1~31
-  duration: number; // endDate - startDate + 1
+  startDate: string | null; // YYYY-MM-DD
+  endDate: string | null;   // YYYY-MM-DD
+  duration: number; // 일수
   isExpanded: boolean;
+  createCard: boolean;
 }
 
 export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps) {
   const [projectTitle, setProjectTitle] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState('1');
+  const [startMonth, setStartMonth] = useState('1');
+  const [endMonth, setEndMonth] = useState('3');
   const [showSample, setShowSample] = useState(false);
+  const currentYear = 2026;
   
-  // 초기 데이터 (샘플과 유사하게)
+  // 초기 데이터 (날짜 형식 변경 YYYY-MM-DD)
   const [rows, setRows] = useState<WBSRow[]>([
-    { id: '1', level: 0, category: '', title: 'Phase 1', description: '요구사항 분석 및 개발 계획 수립', priority: 'High', responsibleId: '', startDate: 1, endDate: 10, duration: 10, isExpanded: true },
-    { id: '2', level: 1, category: '', title: '기획', description: '분석 및 설계', priority: 'High', responsibleId: '', startDate: 1, endDate: 5, duration: 5, isExpanded: true },
-    { id: '3', level: 2, category: '', title: '기획자', description: '요구 사항 정의', priority: 'Medium', responsibleId: '', startDate: 1, endDate: 3, duration: 3, isExpanded: true },
+    { id: '1', level: 0, category: '', title: 'Phase 1', description: '요구사항 분석 및 개발 계획 수립', priority: 'High', responsibleId: '', startDate: `${currentYear}-01-01`, endDate: `${currentYear}-01-10`, duration: 10, isExpanded: true, createCard: true },
+    { id: '2', level: 1, category: '', title: '기획', description: '분석 및 설계', priority: 'High', responsibleId: '', startDate: `${currentYear}-01-01`, endDate: `${currentYear}-01-05`, duration: 5, isExpanded: true, createCard: true },
+    { id: '3', level: 2, category: '', title: '기획자', description: '요구 사항 정의', priority: 'Medium', responsibleId: '', startDate: `${currentYear}-01-01`, endDate: `${currentYear}-01-03`, duration: 3, isExpanded: true, createCard: true },
   ]);
 
   // 그리드 스크롤 동기화를 위한 Ref
+
   const gridHeaderRef = useRef<HTMLDivElement>(null);
   const gridBodyRef = useRef<HTMLDivElement>(null);
 
-  const daysInMonth = 31;
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  // 날짜 데이터 생성 로직 (다중 월 지원)
+  const days = [];
+  const startM = parseInt(startMonth);
+  const endM = parseInt(endMonth);
+
+  // 월 루프
+  for (let m = startM; m <= endM; m++) {
+    const daysInThisMonth = new Date(currentYear, m, 0).getDate();
+    for (let d = 1; d <= daysInThisMonth; d++) {
+        const date = new Date(currentYear, m - 1, d);
+        // 날짜 문자열 생성 (로컬 시간대 이슈 방지를 위해 직접 포맷팅)
+        const dateStr = `${currentYear}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const dayOfWeek = date.getDay();
+        days.push({
+            date,
+            dateStr,
+            month: m,
+            day: d,
+            dayOfWeek,
+            dayName: ['일', '월', '화', '수', '목', '금', '토'][dayOfWeek]
+        });
+    }
+  }
+
+  // 헤더 그룹핑 데이터 생성
+  // 1. 월별 그룹핑
+  const monthGroups = [];
+  let currentMonth = -1;
+  let currentMonthDays = [];
+  
+  for (const dayObj of days) {
+      if (dayObj.month !== currentMonth) {
+          if (currentMonth !== -1) {
+              monthGroups.push({ month: currentMonth, days: [...currentMonthDays] });
+          }
+          currentMonth = dayObj.month;
+          currentMonthDays = [];
+      }
+      currentMonthDays.push(dayObj);
+  }
+  if (currentMonthDays.length > 0) monthGroups.push({ month: currentMonth, days: [...currentMonthDays] });
+
+  // 2. 주차별 그룹핑 (헤더용)
+  const weeks = [];
+  let currentWeekDays = [];
+  let weekCounter = 1;
+  
+  for (let i = 0; i < days.length; i++) {
+      const dayObj = days[i];
+      currentWeekDays.push(dayObj);
+      
+      const isLastDayOfMonth = dayObj.day === new Date(currentYear, dayObj.month, 0).getDate();
+      // 토요일이거나, 월의 마지막이거나, 전체의 마지막이면 주 마감
+      if (dayObj.dayOfWeek === 6 || isLastDayOfMonth || i === days.length - 1) {
+          weeks.push({ id: weekCounter, days: [...currentWeekDays] });
+          currentWeekDays = [];
+          if (dayObj.dayOfWeek === 6) weekCounter++;
+      }
+  }
 
   // 행 추가
   const addRow = (targetId?: string, position: 'child' | 'sibling' = 'sibling') => {
@@ -64,7 +126,8 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
       startDate: null,
       endDate: null,
       duration: 0,
-      isExpanded: true
+      isExpanded: true,
+      createCard: true
     };
 
     if (!targetId) {
@@ -79,7 +142,7 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
     const newRows = [...rows];
 
     if (position === 'child') {
-      newRow.level = Math.min(targetRow.level + 1, 2); // 최대 3단계 (0, 1, 2)
+      newRow.level = Math.min(targetRow.level + 1, 3); // 최대 4단계 (0, 1, 2, 3)
       newRows.splice(index + 1, 0, newRow);
     } else {
       newRow.level = targetRow.level;
@@ -100,41 +163,68 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
 
   // 행 업데이트
   const updateRow = (id: string, updates: Partial<WBSRow>) => {
-    setRows(rows.map(r => r.id === id ? { ...r, ...updates } : r));
+    // 일반 업데이트는 updateRowAndRecalculate를 사용하도록 변경 유도
+    // 여기서는 단순 호환성을 위해 남겨두거나, 내부적으로 호출
+    updateRowAndRecalculate(id, updates);
   };
 
   // 기간 설정 (토글 방식)
   // 클릭한 날짜가 범위 내에 있으면 범위 재설정, 아니면 범위 확장
-  const handleCellClick = (rowId: string, day: number) => {
-    const row = rows.find(r => r.id === rowId);
-    if (!row) return;
+  const handleCellClick = (rowId: string, dayDateStr: string) => {
+    const rowIndex = rows.findIndex(r => r.id === rowId);
+    if (rowIndex === -1) return;
+    const row = rows[rowIndex];
+
+    // 조건 1: 카드 생성이 체크되지 않은 항목은 설정 불가
+    if (!row.createCard) return;
+
+    // 조건 2: 자식이 있는 상위 디렉토리는 직접 설정 불가 (자동 계산됨)
+    const hasChild = rowIndex < rows.length - 1 && rows[rowIndex + 1].level > row.level;
+    if (hasChild) return; 
 
     let newStart = row.startDate;
     let newEnd = row.endDate;
 
     if (newStart === null || newEnd === null) {
-      // 처음 선택
-      newStart = day;
-      newEnd = day;
+      // 1. 아무것도 선택 안된 상태: 클릭한 날짜 선택
+      newStart = dayDateStr;
+      newEnd = dayDateStr;
     } else {
-      if (day < newStart) {
-        newStart = day; // 범위 확장 (앞으로)
-      } else if (day > newEnd) {
-        newEnd = day; // 범위 확장 (뒤로)
+      // 2. 이미 선택된 상태
+      const isSingleSelection = newStart === newEnd;
+      
+      if (isSingleSelection && newStart === dayDateStr) {
+        // 2-1. 단일 날짜이고, 같은 날짜 클릭 -> 취소
+        newStart = null;
+        newEnd = null;
       } else {
-        // 범위 내부 클릭: 해당 날짜만 선택되도록 리셋하거나, 시작/끝을 줄이는 등 다양한 UX가 가능.
-        // 여기서는 가장 단순하게: 클릭한 지점을 시작점으로 리셋 (새로운 기간 설정 시작)
-        // 또는 토글? 범위 선택이 일반적이므로,
-        // 이미 선택된 범위 내를 클릭하면 해당 날짜 단일 선택으로 초기화 (재설정 용이)
-        newStart = day;
-        newEnd = day;
+        // 문자열 비교 (YYYY-MM-DD는 문자열 비교 가능)
+        if (dayDateStr < newStart) {
+          newStart = dayDateStr; // 앞으로 확장
+        } else if (dayDateStr > newEnd) {
+          newEnd = dayDateStr; // 뒤로 확장
+        } else {
+          // 범위 내부 클릭 or 다른 날짜 클릭 -> 해당 날짜로 단일 선택 재설정
+          newStart = dayDateStr;
+          newEnd = dayDateStr;
+        }
       }
     }
 
-    updateRow(rowId, {
+    // Duration 계산 (일수 차이)
+    let newDuration = 0;
+    if (newStart !== null && newEnd !== null) {
+        const start = new Date(newStart);
+        const end = new Date(newEnd);
+        const diffTime = Math.abs(end.getTime() - start.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        newDuration = diffDays + 1; // 시작일 포함
+    }
+
+    updateRowAndRecalculate(rowId, {
       startDate: newStart,
       endDate: newEnd,
-      duration: (newEnd - newStart) + 1
+      duration: newDuration
     });
   };
   
@@ -142,8 +232,81 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
   const changeLevel = (id: string, delta: number) => {
     const row = rows.find(r => r.id === id);
     if (!row) return;
-    const newLevel = Math.max(0, Math.min(2, row.level + delta));
-    updateRow(id, { level: newLevel });
+    const newLevel = Math.max(0, Math.min(3, row.level + delta));
+    
+    // 상태 업데이트 후 부모 날짜 재계산
+    const newRows = rows.map(r => r.id === id ? { ...r, level: newLevel } : r);
+    setRows(recalculateParentDates(newRows));
+  };
+
+  // 헬퍼: 특정 인덱스의 행이 자식(더 깊은 레벨)을 가지고 있는지 확인
+  const hasChildren = (allRows: WBSRow[], index: number) => {
+    const parent = allRows[index];
+    if (index >= allRows.length - 1) return false;
+    return allRows[index + 1].level > parent.level;
+  };
+
+  // 헬퍼: 부모의 날짜를 재귀적으로 계산하는 함수 (Bottom-up 방식)
+  const recalculateParentDates = (currentRows: WBSRow[]): WBSRow[] => {
+    const newRows = [...currentRows];
+    
+    // 역순으로 순회 (자식부터 부모로)
+    for (let i = newRows.length - 1; i >= 0; i--) {
+        const row = newRows[i];
+        
+        let childIndices: number[] = [];
+        for (let j = i + 1; j < newRows.length; j++) {
+            if (newRows[j].level <= row.level) break;
+            if (newRows[j].level === row.level + 1) {
+                childIndices.push(j);
+            }
+        }
+
+        if (childIndices.length > 0) {
+            // 날짜 문자열 비교를 위해 초기값 설정
+            let minStart = '9999-12-31';
+            let maxEnd = '0000-01-01';
+            let hasValidChild = false;
+
+            childIndices.forEach(childIdx => {
+                const child = newRows[childIdx];
+                if (child.startDate && child.endDate) {
+                    if (child.startDate < minStart) minStart = child.startDate;
+                    if (child.endDate > maxEnd) maxEnd = child.endDate;
+                    hasValidChild = true;
+                }
+            });
+
+            if (hasValidChild) {
+                // Duration 재계산
+                const start = new Date(minStart);
+                const end = new Date(maxEnd);
+                const diffTime = Math.abs(end.getTime() - start.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+                newRows[i] = {
+                    ...newRows[i],
+                    startDate: minStart,
+                    endDate: maxEnd,
+                    duration: diffDays
+                };
+            } else {
+                 newRows[i] = {
+                    ...newRows[i],
+                    startDate: null,
+                    endDate: null,
+                    duration: 0
+                };
+            }
+        }
+    }
+    return newRows;
+  };
+
+  // 행 업데이트 및 부모 날짜 재계산 래퍼
+  const updateRowAndRecalculate = (id: string, updates: Partial<WBSRow>) => {
+    const updatedRows = rows.map(r => r.id === id ? { ...r, ...updates } : r);
+    setRows(recalculateParentDates(updatedRows));
   };
 
   const handleExport = () => {
@@ -163,40 +326,47 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
     // 계층 구조 추적을 위한 변수
     let currentLv0Title = '';
     let currentLv1Title = '';
+    let currentLv2Title = '';
 
     validRows.forEach(row => {
       // 레벨에 따라 현재 컨텍스트(부모) 업데이트
       if (row.level === 0) {
         currentLv0Title = row.title;
         currentLv1Title = '';
+        currentLv2Title = '';
       } else if (row.level === 1) {
         currentLv1Title = row.title;
+        currentLv2Title = '';
+      } else if (row.level === 2) {
+        currentLv2Title = row.title;
+      }
+
+      // 카드 생성 체크가 해제된 경우 스킵 (단, 계층 구조 컨텍스트는 업데이트 해야 하므로 컨텍스트 업데이트 로직 뒤에 배치)
+      if (!row.createCard) {
+        return;
       }
 
       // 기간 문자열 생성
       let periodStr = '';
       if (row.startDate && row.endDate) {
-        periodStr = ` [일정: ${selectedMonth}월 ${row.startDate}일 ~ ${row.endDate}일 (${row.duration}일)]`;
+        periodStr = ` [일정: ${row.startDate} ~ ${row.endDate} (${row.duration}일)]`;
       }
 
-      // 카테고리 결정 로직: 
-      // Lv0(최상위) 항목은 그 자체가 카테고리가 되거나 '기획/관리' 등으로 분류될 수 있음.
-      // Lv1, Lv2 항목은 자신의 최상위 부모(Lv0)의 제목을 카테고리로 상속받음.
+      // 카테고리 결정 로직: 부모 경로(Ancestors Path)를 사용
       let assignedCategory = '';
       if (row.level === 0) {
-        assignedCategory = row.title; // 자기 자신이 카테고리명
-      } else {
-        assignedCategory = currentLv0Title || '미분류';
+        assignedCategory = ''; 
+      } else if (row.level === 1) {
+        assignedCategory = currentLv0Title;
+      } else if (row.level === 2) {
+        assignedCategory = `${currentLv0Title} > ${currentLv1Title}`;
+      } else if (row.level === 3) {
+        assignedCategory = `${currentLv0Title} > ${currentLv1Title} > ${currentLv2Title}`;
       }
-
-      // 설명에 계층 경로 포함 (예: 기획 > 화면설계 > 메��페이지)
-      let pathPrefix = '';
-      if (row.level === 1) pathPrefix = `${currentLv0Title} > `;
-      if (row.level === 2) pathPrefix = `${currentLv0Title} > ${currentLv1Title} > `;
 
       novasDemandas.push({
         Titulo: row.title,
-        Descricao: `[WBS] ${pathPrefix}${row.description || row.title}${periodStr}`,
+        Descricao: `[WBS] ${row.description || row.title}${periodStr}`,
         Projeto: projectTitle,
         Categoria: assignedCategory,
         Prioridade: row.priority,
@@ -228,7 +398,8 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
                 startDate: null, 
                 endDate: null, 
                 duration: 0, 
-                isExpanded: true 
+                isExpanded: true,
+                createCard: true
             }
         ]);
         toast.success('초기화되었습니다.');
@@ -237,63 +408,93 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Top Bar */}
-      <div className="bg-white border-b px-6 py-4 flex items-center justify-between sticky top-0 z-20">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={onVoltar} size="sm">
-            <ArrowRight className="w-4 h-4 rotate-180 mr-2" />
-            뒤로
-          </Button>
-          <div className="h-6 w-px bg-gray-200" />
-          <h1 className="text-xl font-bold text-gray-900">WBS 작성기</h1>
-          <div className="flex items-center gap-2 ml-4">
-            <span className="text-sm text-gray-500">Project:</span>
-            <Input 
-              value={projectTitle}
-              onChange={(e) => setProjectTitle(e.target.value)}
-              placeholder="프로젝트명 입력"
-              className="w-[200px] h-8"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-             <span className="text-sm text-gray-500">Month:</span>
-             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-[80px] h-8">
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-                        <SelectItem key={m} value={m.toString()}>{m}월</SelectItem>
-                    ))}
-                </SelectContent>
-             </Select>
-          </div>
+      {/* Top Bar Area */}
+      <div className="bg-white border-b sticky top-0 z-20 shadow-sm">
+        {/* Row 1: Project Title (Top Most) */}
+        <div className="px-6 py-3 border-b border-gray-100 bg-slate-50/50">
+            <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Project Name</span>
+                <Input 
+                    value={projectTitle}
+                    onChange={(e) => setProjectTitle(e.target.value)}
+                    placeholder="프로젝트명을 입력하세요 (예: 차세대 쇼핑몰 구축)"
+                    className="flex-1 h-9 text-lg font-semibold bg-transparent border-transparent hover:bg-white focus:bg-white focus:border-gray-200 transition-all px-2"
+                />
+            </div>
         </div>
-        <div className="flex items-center gap-2">
-            <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setShowSample(!showSample)}
-            >
-                {showSample ? '샘플 닫기' : '샘플 보기'}
+
+        {/* Row 2: Toolbar & Controls */}
+        <div className="px-6 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+            <Button variant="ghost" onClick={onVoltar} size="sm" className="text-gray-600">
+                <ArrowRight className="w-4 h-4 rotate-180 mr-2" />
+                뒤로
             </Button>
-            <Button 
-                onClick={handleExport}
-                className="bg-[#007e7a] hover:bg-[#006662]"
-                size="sm"
-            >
-                <Save className="w-4 h-4 mr-2" />
-                보드에 적용
-            </Button>
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={handleReset}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                title="초기화"
-            >
-                <RotateCcw className="w-4 h-4" />
-            </Button>
+            <div className="h-4 w-px bg-gray-300" />
+            <span className="font-semibold text-gray-700">WBS 작성기</span>
+            
+            <div className="flex items-center gap-2 ml-4 bg-gray-100 rounded-md px-2 py-1">
+                <span className="text-xs text-gray-500 font-medium">기간 설정:</span>
+                <div className="flex items-center gap-1">
+                    <Select value={startMonth} onValueChange={setStartMonth}>
+                        <SelectTrigger className="w-[70px] h-7 text-xs border-none bg-transparent focus:ring-0 shadow-none p-0 gap-1">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                                <SelectItem key={m} value={m.toString()}>{m}월</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <span className="text-xs text-gray-400">~</span>
+                    <Select value={endMonth} onValueChange={(val) => {
+                        // 종료월은 시작월보다 작을 수 없음
+                        if (parseInt(val) < parseInt(startMonth)) {
+                            toast.error('종료월은 시작월보다 빨라야 합니다.');
+                            return;
+                        }
+                        setEndMonth(val);
+                    }}>
+                        <SelectTrigger className="w-[70px] h-7 text-xs border-none bg-transparent focus:ring-0 shadow-none p-0 gap-1">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+                                <SelectItem key={m} value={m.toString()}>{m}월</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+                <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setShowSample(!showSample)}
+                    className="text-gray-500"
+                >
+                    {showSample ? '샘플 닫기' : '샘플 보기'}
+                </Button>
+                <Button 
+                    onClick={handleExport}
+                    className="bg-[#007e7a] hover:bg-[#006662] shadow-sm"
+                    size="sm"
+                >
+                    <Save className="w-4 h-4 mr-2" />
+                    보드에 적용
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleReset}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                    title="초기화"
+                >
+                    <RotateCcw className="w-4 h-4" />
+                </Button>
+            </div>
         </div>
       </div>
 
@@ -316,10 +517,10 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
         
         {/* Left Panel: Task List */}
         <div className="w-[50%] flex flex-col border-r bg-white min-w-[500px]">
-          {/* Header */}
-          <div className="h-10 bg-gray-100 border-b flex items-center px-4 text-xs font-semibold text-gray-600">
-            <div className="w-[40px] text-center">Lv</div>
-            <div className="flex-1 px-2">태스크 / 구성요소</div>
+          {/* Header - 오른쪽 그리드 헤더 높이(76px)와 동일하게 맞춤 */}
+          <div className="h-[76px] bg-gray-100 border-b flex items-center px-4 text-xs font-semibold text-gray-600 select-none">
+            <div className="flex-1 px-2 pl-6">디렉토리 구조</div>
+            <div className="w-[60px] text-center" title="체크 시 칸반 카드로 생성됩니다">카드생성</div>
             <div className="w-[100px] px-2">담당자</div>
             <div className="w-[50px] text-center">기간</div>
             <div className="w-[80px] text-center">동작</div>
@@ -331,38 +532,86 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
                 <div 
                     key={row.id} 
                     className={cn(
-                        "flex items-center border-b hover:bg-gray-50 transition-colors group h-[40px]",
-                        row.level === 0 && "bg-slate-50 font-medium",
-                        row.level === 1 && "bg-white",
+                        "flex items-center border-b hover:bg-blue-50/50 transition-colors group h-[56px] relative", 
+                        // 레벨에 따른 배경색 미세 조정 (선택적)
+                        row.level === 0 && "bg-slate-50/30",
                     )}
                 >
-                    {/* Level Control */}
-                    <div className="w-[40px] flex justify-center text-xs text-gray-400 gap-0.5">
-                        <button onClick={() => changeLevel(row.id, -1)} className="hover:text-blue-600 px-0.5">{"<"}</button>
-                        <span className="w-2 text-center">{row.level + 1}</span>
-                        <button onClick={() => changeLevel(row.id, 1)} className="hover:text-blue-600 px-0.5">{">"}</button>
+                    {/* Indentation Guidelines (Visual Only) */}
+                    <div className="absolute left-0 top-0 bottom-0 flex pointer-events-none">
+                        {Array.from({ length: row.level }).map((_, i) => (
+                            <div key={i} className="w-[20px] border-r border-gray-100/50 h-full" />
+                        ))}
                     </div>
 
-                    {/* Title & Description */}
-                    <div className="flex-1 px-2 flex items-center gap-2 overflow-hidden">
-                        {/* Indentation */}
-                        <div style={{ width: `${row.level * 24}px` }} className="flex-shrink-0" />
+                    {/* Title & Description (Tree View) */}
+                    <div className="flex-1 px-2 flex items-center overflow-hidden py-1 pl-2">
+                        {/* Indent Spacer & Connector */}
+                        <div style={{ paddingLeft: `${row.level * 20}px` }} className="flex-shrink-0 transition-all duration-200" />
                         
-                        <div className="flex-1 flex flex-col justify-center min-w-0">
+                        {/* Icon & Toggle */}
+                        <div className="relative flex items-center gap-1.5 mr-2 flex-shrink-0 text-gray-400 group/icon">
+                             {/* Level Control Buttons (Hover only) - Repositioned to not overlap with text */}
+                             <div className="absolute -left-[52px] top-1/2 -translate-y-1/2 flex items-center bg-white shadow-sm border border-gray-200 rounded-md p-0.5 opacity-0 group-hover/icon:opacity-100 transition-opacity z-20">
+                                <Button 
+                                    variant="ghost" size="icon" className="h-5 w-5 hover:bg-slate-100 hover:text-blue-600"
+                                    onClick={() => changeLevel(row.id, -1)}
+                                    title="상위 폴더로 이동 (Outdent)"
+                                    disabled={row.level === 0}
+                                >
+                                    <Outdent className="w-3 h-3" />
+                                </Button>
+                                <Button 
+                                    variant="ghost" size="icon" className="h-5 w-5 hover:bg-slate-100 hover:text-blue-600"
+                                    onClick={() => changeLevel(row.id, 1)}
+                                    title="하위 폴더로 이동 (Indent)"
+                                    disabled={row.level >= 3}
+                                >
+                                    <Indent className="w-3 h-3" />
+                                </Button>
+                             </div>
+
+                             {row.level < 3 ? (
+                                 <FolderOpen className={cn("w-4 h-4", row.level === 0 ? "text-blue-600 fill-blue-100" : "text-slate-500 fill-slate-50")} />
+                             ) : (
+                                 <FileText className="w-4 h-4 text-gray-400" />
+                             )}
+                        </div>
+                        
+                        <div className="flex-1 flex flex-col justify-center min-w-0 gap-0.5">
                             <input 
-                                className="w-full bg-transparent border-none p-0 text-sm focus:ring-0 placeholder:text-gray-300"
-                                placeholder={row.level === 0 ? "단계/카테고리명" : "작업 제목"}
+                                className="w-full bg-transparent border-none p-0 text-sm focus:ring-0 placeholder:text-gray-300 transition-colors font-medium text-gray-700"
+                                placeholder={row.level === 0 ? "최상위 폴더명" : "폴더/태스크 이름"}
                                 value={row.title}
                                 onChange={(e) => updateRow(row.id, { title: e.target.value })}
                             />
-                            {/* 상세 설명 (Lv2 이상일 때 혹은 항상 표시?) - 공간 제약상 툴팁 혹은 작게 표시 */}
+                            {/* 상세 설명 칸 (작게) */}
                             <input 
-                                className="w-full bg-transparent border-none p-0 text-[10px] text-gray-400 focus:ring-0 placeholder:text-gray-200"
-                                placeholder="상세 설명 입력..."
+                                className="w-full bg-transparent p-0 text-[11px] text-gray-400 focus:text-gray-600 focus:bg-white/50 rounded focus:ring-0 placeholder:text-gray-200 border-none h-4"
+                                placeholder="상세 설명..."
                                 value={row.description}
                                 onChange={(e) => updateRow(row.id, { description: e.target.value })}
                             />
                         </div>
+                    </div>
+
+                    {/* Create Card Checkbox */}
+                    <div className="w-[60px] flex justify-center items-center">
+                        <Checkbox 
+                            checked={row.createCard}
+                            onCheckedChange={(checked) => {
+                                // 체크 해제 시 날짜 정보 초기화 (설정 불가 상태로 만들기 위해)
+                                const isChecked = checked as boolean;
+                                const updates: Partial<WBSRow> = { createCard: isChecked };
+                                if (!isChecked) {
+                                    updates.startDate = null;
+                                    updates.endDate = null;
+                                    updates.duration = 0;
+                                }
+                                updateRowAndRecalculate(row.id, updates);
+                            }}
+                            title="체크 시 이 항목이 칸반 보드에 카드로 생성됩니다."
+                        />
                     </div>
 
                     {/* Responsible */}
@@ -371,7 +620,7 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
                             value={row.responsibleId} 
                             onValueChange={(val) => updateRow(row.id, { responsibleId: val })}
                         >
-                            <SelectTrigger className="h-7 text-xs border-transparent focus:ring-0 bg-transparent p-0">
+                            <SelectTrigger className="h-7 text-xs border-transparent focus:ring-0 bg-transparent p-0 hover:bg-gray-100/50 rounded px-1">
                                 <SelectValue placeholder="미지정" />
                             </SelectTrigger>
                             <SelectContent>
@@ -384,29 +633,41 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
                     </div>
 
                     {/* Duration Display */}
-                    <div className="w-[50px] text-center text-xs text-gray-500">
-                        {row.duration > 0 ? `${row.duration}일` : '-'}
+                    <div className="w-[50px] text-center text-xs text-gray-500 font-mono">
+                        {row.duration > 0 ? row.duration : '-'}
                     </div>
 
                     {/* Actions */}
-                    <div className="w-[80px] flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-[80px] flex justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                          <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="h-6 w-6 text-green-600"
+                            className="h-7 w-7 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
                             onClick={() => addRow(row.id, 'sibling')}
-                            title="아래에 행 추가"
+                            title="형제 항목 추가"
                         >
-                            <Plus className="w-3 h-3" />
+                            <Folder className="w-3.5 h-3.5" />
                         </Button>
+                        {/* 4뎁스(Level 3)에서는 하위 항목 추가 불가능 */}
+                        {row.level < 3 && (
+                            <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                                onClick={() => addRow(row.id, 'child')}
+                                title="하위 항목 추가"
+                            >
+                                <CornerDownRight className="w-3.5 h-3.5" />
+                            </Button>
+                        )}
                         <Button 
                             variant="ghost" 
                             size="icon" 
-                            className="h-6 w-6 text-red-500"
+                            className="h-7 w-7 text-gray-400 hover:text-red-600 hover:bg-red-50"
                             onClick={() => removeRow(row.id)}
                             title="삭제"
                         >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                     </div>
                 </div>
@@ -423,50 +684,93 @@ export function TelaWBS({ equipe, onExportarParaKanban, onVoltar }: TelaWBSProps
 
         {/* Right Panel: Gantt Chart Grid */}
         <div className="flex-1 flex flex-col overflow-hidden bg-white">
-            {/* Grid Header */}
-            <div className="h-10 bg-slate-800 text-white flex border-b border-slate-700 overflow-hidden select-none">
-                {days.map(d => (
-                    <div key={d} className="flex-1 min-w-[24px] border-r border-slate-600 flex items-center justify-center text-[10px] sm:text-xs">
-                        {d}
-                    </div>
-                ))}
+            {/* Grid Header (3단 구조: 월 > 주차 > 날짜) */}
+            <div className="bg-slate-800 text-white flex flex-col border-b border-slate-700 overflow-hidden select-none sticky top-0 z-10">
+                {/* 1단: 월 표시 */}
+                <div className="flex h-6 border-b border-slate-700">
+                    {monthGroups.map((group, idx) => (
+                        <div 
+                            key={`month-${idx}`} 
+                            className="flex items-center justify-center text-xs font-bold bg-slate-900 border-r border-slate-700 text-slate-200"
+                            style={{ flex: group.days.length, minWidth: `${group.days.length * 24}px` }}
+                        >
+                            {group.month}월
+                        </div>
+                    ))}
+                </div>
+
+                {/* 2단: 주차 표시 */}
+                <div className="flex h-5 border-b border-slate-700">
+                    {weeks.map((week, idx) => (
+                        <div 
+                            key={`week-${idx}`} 
+                            className="flex items-center justify-center text-[10px] font-medium bg-slate-800/80 border-r border-slate-700 text-slate-400"
+                            style={{ flex: week.days.length, minWidth: `${week.days.length * 24}px` }}
+                        >
+                            {week.id}주
+                        </div>
+                    ))}
+                </div>
+                {/* 3단: 날짜/요일 표시 */}
+                <div className="flex h-8">
+                    {days.map(d => (
+                        <div 
+                            key={d.dateStr} 
+                            className={cn(
+                                "flex-1 min-w-[24px] border-r border-slate-700 flex flex-col items-center justify-center text-[10px] sm:text-xs",
+                                d.dayOfWeek === 0 && "text-red-300 bg-red-900/10", // 일요일
+                                d.dayOfWeek === 6 && "text-blue-300 bg-blue-900/10", // 토요일
+                            )}
+                        >
+                            <span className="leading-none mb-0.5">{d.day}</span>
+                            <span className="text-[9px] opacity-60 leading-none">{d.dayName}</span>
+                        </div>
+                    ))}
+                </div>
             </div>
 
             {/* Grid Body */}
             <div className="flex-1 overflow-y-auto scrollbar-hide bg-[url('/grid-pattern.png')]">
-                {rows.map((row) => {
+                {rows.map((row, idx) => {
                     // 범위 내에 있는지 확인하는 헬퍼
-                    const isInRange = (day: number) => {
+                    const isInRange = (dateStr: string) => {
                         if (row.startDate === null || row.endDate === null) return false;
-                        return day >= row.startDate && day <= row.endDate;
+                        return dateStr >= row.startDate && dateStr <= row.endDate;
                     };
                     
                     // 시작점/끝점 스타일링을 위해
-                    const isStart = row.startDate === null ? false : (day: number) => day === row.startDate;
-                    const isEnd = row.endDate === null ? false : (day: number) => day === row.endDate;
+                    const isStart = row.startDate === null ? false : (dateStr: string) => dateStr === row.startDate;
+                    const isEnd = row.endDate === null ? false : (dateStr: string) => dateStr === row.endDate;
+
+                    // 비활성화 상태 로직 (카드 생성 안함 or 상위 그룹)
+                    const isDisabled = !row.createCard;
+                    const isGroup = idx < rows.length - 1 && rows[idx + 1].level > row.level;
+                    const isInteractable = !isDisabled && !isGroup;
 
                     return (
-                        <div key={row.id} className="h-[40px] flex border-b border-gray-100 hover:bg-gray-50">
+                        <div key={row.id} className={cn("h-[56px] flex border-b border-gray-100 hover:bg-gray-50", isDisabled && "bg-slate-50/50 opacity-60")}>
                             {days.map(d => (
                                 <div 
-                                    key={d} 
+                                    key={d.dateStr} 
                                     className={cn(
-                                        "flex-1 min-w-[24px] border-r border-dashed border-gray-200 cursor-pointer transition-colors relative group",
-                                        // 주말 강조 (토/일 대략 계산: 7일 주기) - 여기선 단순화
-                                        // d % 7 === 6 || d % 7 === 0 ? "bg-slate-50" : ""
-                                        "hover:bg-blue-50" 
+                                        "flex-1 min-w-[24px] border-r border-dashed border-gray-200 transition-colors relative group",
+                                        // 주말 배경색
+                                        d.dayOfWeek === 0 && "bg-red-50/30",
+                                        d.dayOfWeek === 6 && "bg-blue-50/30",
+                                        // 상호작용 가능한 경우에만 커서 및 호버 효과
+                                        isInteractable ? "cursor-pointer hover:bg-blue-50" : "cursor-default"
                                     )}
-                                    onClick={() => handleCellClick(row.id, d)}
-                                    title={`${d}일`}
+                                    onClick={() => handleCellClick(row.id, d.dateStr)}
+                                    title={isInteractable ? `${d.month}월 ${d.day}일 (${d.dayName})` : (isGroup ? "하위 항목에 의해 자동 계산됩니다" : "카드 생성을 체크해야 설정 가능합니다")}
                                 >
                                     {/* Bar Rendering */}
-                                    {isInRange(d) && (
+                                    {isInRange(d.dateStr) && (
                                         <div className={cn(
-                                            "absolute top-[8px] bottom-[8px] left-0 right-0 bg-blue-500/80 shadow-sm",
-                                            isStart(d) && "left-[2px] rounded-l-md bg-blue-600",
-                                            isEnd(d) && "right-[2px] rounded-r-md bg-blue-600",
-                                            // 상위 레벨(Phase 등)은 다른 색상
-                                            row.level === 0 && "bg-slate-700 top-[4px] bottom-[4px]",
+                                            "absolute top-[12px] bottom-[12px] left-0 right-0 bg-blue-500/80 shadow-sm", // 상하 여백 조정
+                                            isStart(d.dateStr) && "left-[2px] rounded-l-md bg-blue-600",
+                                            isEnd(d.dateStr) && "right-[2px] rounded-r-md bg-blue-600",
+                                            // 상위 레벨(Phase 등)은 다른 색상 & 모양
+                                            isGroup && "bg-slate-500/90 top-[18px] bottom-[18px] rounded-sm h-[20px]",
                                         )} />
                                     )}
                                 </div>
