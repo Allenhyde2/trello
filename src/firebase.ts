@@ -1,11 +1,9 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore"; // 1. 여기가 추가되었습니다 (DB 도구 가져오기)
 import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
 // Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyB3BZV8OaERbm4l1Db_NIO2iyeE--kUzq4",
   authDomain: "trellodataserver.firebaseapp.com",
@@ -19,3 +17,6 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
+
+// Initialize Cloud Firestore and get a reference to the service
+export const db = getFirestore(app); // 2. 여기가 핵심입니다! (db를 만들어서 밖으로 내보냄)
